@@ -3,7 +3,7 @@
 # name: discourse-sid-preview
 # about: Inline SID file preview player for Commodore 64 .sid uploads
 # meta_topic_id: TODO
-# version: 0.1.0
+# version: 0.2.0
 # authors: Tony
 # url: https://github.com/TODO/discourse-sid-preview
 # required_version: 2.7.0
