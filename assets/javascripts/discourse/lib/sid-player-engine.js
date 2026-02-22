@@ -55,25 +55,31 @@ function _loadVendorScripts() {
 
 // ── ScriptNodePlayer singleton ───────────────────────────────────────────────
 
-// The Wothke player is a singleton (window.player).  We create it once and
-// reuse it for every subsequent load — only the per-load callbacks change.
-let _playerReadyPromise = null;
+// ── ScriptNodePlayer instance management ─────────────────────────────────────
 
 // Mutable object updated at the start of every load() call.
 // Closures installed into ScriptNodePlayer at creation time read from here.
 let _activeCallbacks = null;
 
-function _ensurePlayer() {
-  if (_playerReadyPromise) return _playerReadyPromise;
-
-  _playerReadyPromise = new Promise((resolve) => {
-    // SIDPlayBackendAdapter is exposed on window by websidplay-backend.js.
-    // No C64 ROMs supplied — the engine handles all PSID files without them.
+/**
+ * Create a fresh ScriptNodePlayer instance.
+ *
+ * DeepSID calls createInstance() before every loadMusicFromURL() — this tears
+ * down the previous audio pipeline and builds a new one.  This avoids the
+ * _fileReadyNotify cache problem (repeated loads of the same URL) and the
+ * WASM abort(3) crash that occurs when re-loading into an already-initialised
+ * backend.
+ */
+function _createPlayer() {
+  return new Promise((resolve) => {
     const adapter = new window.SIDPlayBackendAdapter(
       undefined, // basicROM
       undefined, // charROM
       undefined  // kernalROM
     );
+    // 16384 is the maximum ScriptProcessorNode allows — generous headroom
+    // to survive GC pauses and main-thread contention.
+    adapter.setProcessorBufSize(16384);
 
     window.ScriptNodePlayer.createInstance(
       adapter,
@@ -86,12 +92,8 @@ function _ensurePlayer() {
         resolve();
       },
 
-      // onTrackReadyToPlay — fires after every successful loadMusicFromURL()
-      function onTrackReadyToPlay() {
-        if (_activeCallbacks && _activeCallbacks.onTrackReady) {
-          _activeCallbacks.onTrackReady();
-        }
-      },
+      // onTrackReadyToPlay — global handler; overridden per-call via 6th param
+      function onTrackReadyToPlay() {},
 
       // onTrackEnd — fires when the song ends naturally / times out
       function onTrackEnd() {
@@ -101,8 +103,6 @@ function _ensurePlayer() {
       }
     );
   });
-
-  return _playerReadyPromise;
 }
 
 // ── SIDPlayer public class ───────────────────────────────────────────────────
@@ -131,7 +131,10 @@ export default class SIDPlayer {
 
   /**
    * Fetch and prepare a SID file for playback.
-   * Resolves once the track is ready (ScriptNodePlayer auto-plays at this point).
+   *
+   * Creates a fresh ScriptNodePlayer instance for every load — this matches
+   * DeepSID's approach and avoids the _fileReadyNotify cache bug and WASM
+   * abort(3) that occur when reusing a stale instance.
    */
   load(url, subtune = 0) {
     this._url = url;
@@ -141,40 +144,51 @@ export default class SIDPlayer {
     const self = this;
 
     return _loadVendorScripts()
-      .then(() => {
-        // Register per-load callbacks BEFORE creating / reusing the player so
-        // they are in place when onTrackReadyToPlay fires.
-        _activeCallbacks = {
-          onTrackReady() {
-            self._loaded = true;
-            self._isPlaying = true; // ScriptNodePlayer auto-plays after load
-            self._updateMetadata();
-            if (self._onLoad) self._onLoad(self._metadata);
-            if (self._onStart) self._onStart();
-            self._startTimeUpdates();
-          },
-          onTrackEnd() {
-            self._isPlaying = false;
-            self._stopTimeUpdates();
-            if (self._onEnd) self._onEnd();
-          },
-        };
-
-        return _ensurePlayer();
-      })
+      .then(() => _createPlayer())
       .then(
         () =>
           new Promise((resolve, reject) => {
+            // Timeout guard — prevents hanging forever if callbacks never fire.
+            const timeout = setTimeout(
+              () => reject(new Error("SID load timed out")),
+              15000
+            );
+
+            // Wire up the onTrackEnd callback for this load cycle.
+            _activeCallbacks = {
+              onTrackEnd() {
+                self._isPlaying = false;
+                self._stopTimeUpdates();
+                if (self._onEnd) self._onEnd();
+              },
+            };
+
             const p = window.ScriptNodePlayer.getInstance();
             if (!p) {
+              clearTimeout(timeout);
               reject(new Error("ScriptNodePlayer not ready"));
               return;
             }
+
             p.loadMusicFromURL(
               url,
               { track: subtune },
-              () => resolve(),
-              () => reject(new Error("Failed to load SID: " + url))
+              () => {},  // onCompletion
+              () => {    // onFail
+                clearTimeout(timeout);
+                reject(new Error("Failed to load SID: " + url));
+              },
+              () => {},  // onProgress
+              () => {    // onTrackReadyToPlay (6th param — per-call override)
+                clearTimeout(timeout);
+                self._loaded = true;
+                self._isPlaying = true;
+                self._updateMetadata();
+                if (self._onLoad) self._onLoad(self._metadata);
+                if (self._onStart) self._onStart();
+                self._startTimeUpdates();
+                resolve();
+              }
             );
           })
       );
@@ -256,13 +270,36 @@ export default class SIDPlayer {
   }
 
   /**
-   * Switch to a different subtune.  Triggers an async reload (file is cached
-   * after the first load, so no further network request is made).
+   * Switch to a different subtune in-place on the already-loaded SID file.
+   *
+   * This calls the WASM emu_set_subsong() function via the backend adapter's
+   * evalTrackOptions(), avoiding the need to tear down and recreate the
+   * ScriptNodePlayer (which triggers WASM abort(3)).
+   *
+   * Returns true on success, false on failure.
    */
-  setSubtune(index) {
-    if (!this._url) return;
+  switchSubtune(index) {
+    if (!this._loaded) return false;
+
+    const p = window.ScriptNodePlayer && window.ScriptNodePlayer.getInstance();
+    if (!p) return false;
+
+    const adapter = p._backendAdapter;
+    if (!adapter || typeof adapter.evalTrackOptions !== "function") return false;
+
+    const ret = adapter.evalTrackOptions({ track: index });
+    if (ret !== 0) return false;
+
     this._subtune = index;
-    this.load(this._url, index).catch(() => {});
+
+    // Seek back to position 0 so the new subtune starts from the beginning.
+    try {
+      p.seekPlaybackPosition(0);
+    } catch (_) {
+      // Seek is not supported for every SID; silently ignore.
+    }
+
+    return true;
   }
 
   // ── Configuration ────────────────────────────────────────────────────────
@@ -338,6 +375,9 @@ export default class SIDPlayer {
     this._stopTimeUpdates();
     this._loaded = false;
     this._metadata = null;
+    // Clear global callbacks so a destroyed component's stale handlers
+    // don't interfere with the next SID player that loads.
+    _activeCallbacks = null;
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────

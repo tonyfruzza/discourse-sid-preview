@@ -1,6 +1,6 @@
 # discourse-sid-preview
 
-Inline SID file preview player for Discourse — lets users play Commodore 64 `.sid` music files directly in forum posts.
+Inline SID file preview player for Discourse that lets users play Commodore 64 `.sid` files directly in forum posts.
 
 ## Overview
 
@@ -10,27 +10,22 @@ When a user uploads a `.sid` file to a post, this plugin detects the download li
 
 ## Engine
 
-Leverages **jsSID** by Hermit (Mihaly Horvath) — a pure JavaScript SID emulator (~14 KB) licensed under WTFPL.
+The plugin now uses a WASM-based playback stack (not jsSID):
 
-- 6502 CPU emulation (cycle-based at audio sample rate)
-- MOS 6581/8580 SID chip emulation with filter
-- PSID/RSID format support
-- 2SID/3SID multi-chip support
-- ADSR delay-bug simulation
-- No digi playback (by design — lightweight engine)
+- `websidplay.wasm` (libsidplayfp / reSIDfp emulation core)
+- `websidplay-backend.js` (Emscripten bridge and `SIDPlayBackendAdapter`)
+- `scriptprocessor_player.min.js` (ScriptNodePlayer WebAudio framework)
 
-Source: https://github.com/og2t/jsSID
+At runtime, `sid-player-engine.js` loads these assets from `/sid-player/`, creates a fresh ScriptNodePlayer instance per track load, and preserves the same public `SIDPlayer` API used by the UI component.
 
 ## Features
 
-- **Play / Pause / Stop / Restart** controls
+- Play / Pause / Stop / Restart controls
 - Auto-stop at configurable time limit (default 60 seconds)
 - SID metadata display (title, author)
 - Subtune selector for multi-tune SID files
 - Progress bar
-- Retro C64-inspired visual theme
-- Mobile responsive
-- Non-intrusive — only activates on posts containing `.sid` links
+- Non-intrusive - only activates on posts containing `.sid` links
 
 ## Plugin Settings
 
@@ -40,11 +35,11 @@ Source: https://github.com/og2t/jsSID
 | `sid_preview_max_seconds` | `60` | Auto-stop limit |
 | `sid_preview_default_model` | `6581` | Default SID chip model |
 
-**Important**: Add `sid` to your Discourse **authorized extensions** site setting so uploads are accepted.
+Important: Add `sid` to your Discourse `authorized extensions` site setting so uploads are accepted.
 
 ## Installation
 
-### Option A: Git clone during init (recommended for your k8s setup)
+### Option A: Git clone during init (recommended for k8s setup)
 
 Add to your Discourse init script:
 
@@ -53,8 +48,14 @@ cd /var/www/discourse/plugins
 git clone https://github.com/tonyfruzza/discourse-sid-preview.git
 ```
 
+## Runtime Notes
+
+- Keep `vendor/sid-player/` in the repository. On boot, `plugin.rb` copies these files into `public/sid-player/` so the browser can load the WASM engine.
+- The plugin extends CSP with `'wasm-unsafe-eval'` for WebAssembly compilation.
+
 ## Credits
 
-- **jsSID** by Hermit (Mihaly Horvath) — WTFPL license
-- **DeepSID** by Chordian — reference architecture
-- **libsidplayfp** project — upstream SID emulation library
+- websidplayfp (libsidplayfp / reSIDfp) by Juergen Wothke: https://bitbucket.org/wothke/websidplayfp/
+- ScriptNodePlayer by Juergen Wothke: https://bitbucket.org/wothke/websidplayfp/
+- DeepSID by Chordian (reference integration and adapter assets): https://github.com/Chordian/deepsid
+- libsidplayfp project (upstream SID emulation library)

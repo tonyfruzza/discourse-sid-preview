@@ -12,6 +12,15 @@ enabled_site_setting :sid_preview_enabled
 
 register_asset "stylesheets/common/sid-player.scss"
 
+# Ensure the icons used in the player template are included in Discourse's SVG sprite.
+register_svg_icon "stop"
+register_svg_icon "redo"
+
+# WebAssembly requires 'wasm-unsafe-eval' in the script-src CSP directive.
+# This is a narrowly-scoped permission that only allows WASM compilation —
+# it does NOT permit general eval() or inline scripts.
+extend_content_security_policy(script_src: ["'wasm-unsafe-eval'"])
+
 after_initialize do
   # Ensure .sid is in the list of authorized extensions if the plugin is enabled
   # Admins should also add "sid" to the authorized_extensions site setting
