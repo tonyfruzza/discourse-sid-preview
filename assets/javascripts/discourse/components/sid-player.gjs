@@ -35,8 +35,9 @@ export default class SidPlayerComponent extends Component {
   }
 
   get formattedTime() {
-    const mins = Math.floor(this.playtime / 60);
-    const secs = this.playtime % 60;
+    const total = Math.floor(this.playtime);
+    const mins = Math.floor(total / 60);
+    const secs = total % 60;
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   }
 
@@ -109,7 +110,7 @@ export default class SidPlayerComponent extends Component {
     this._stopTimer();
     this._timerInterval = setInterval(() => {
       if (this._player) {
-        this.playtime = this._player.getPlaytime();
+        this.playtime = Math.floor(this._player.getPlaytime());
         if (this.playtime >= this.maxSeconds) {
           this._player.pause();
           this._stopTimer();
@@ -150,6 +151,16 @@ export default class SidPlayerComponent extends Component {
       this.loadAndPlay();
       return;
     }
+    if (this.state === "ended") {
+      // Time limit was reached — seek back to 0 and resume.
+      // Using restart() avoids recreating the ScriptNodePlayer which
+      // triggers WASM abort(3).
+      this._player.restart();
+      this.playtime = 0;
+      this.state = "playing";
+      this._startTimer();
+      return;
+    }
     this._player.play();
     this.state = "playing";
     this._startTimer();
@@ -187,16 +198,23 @@ export default class SidPlayerComponent extends Component {
   @action
   changeSubtune(event) {
     if (this._player) {
-      const wasPlaying = this.state === "playing";
-      this.currentSubtune = parseInt(event.target.value, 10);
-      this._player.setSubtune(this.currentSubtune);
-      this.playtime = 0;
-      if (wasPlaying) {
-        this._player.play();
-        this.state = "playing";
+      const newSubtune = parseInt(event.target.value, 10);
+
+      // Switch the subtune in-place via the WASM emu_set_subsong() call.
+      // This avoids recreating the ScriptNodePlayer which triggers abort(3).
+      const ok = this._player.switchSubtune(newSubtune);
+      if (ok) {
+        this.currentSubtune = newSubtune;
+        this.playtime = 0;
+        // Ensure playback is running after the switch.
+        if (this.state !== "playing") {
+          this._player.play();
+          this.state = "playing";
+        }
         this._startTimer();
       } else {
-        this.state = "ready";
+        this.state = "error";
+        this.errorMessage = "Failed to load subtune";
       }
     }
   }
@@ -284,7 +302,7 @@ export default class SidPlayerComponent extends Component {
               title="Stop"
               {{on "click" this.stop}}
             >
-              {{icon "far-stop-circle"}}
+              {{icon "stop"}}
             </button>
 
             <button
@@ -293,7 +311,7 @@ export default class SidPlayerComponent extends Component {
               title="Restart"
               {{on "click" this.restart}}
             >
-              {{icon "redo"}}
+              {{icon "arrows-rotate"}}
             </button>
           {{/if}}
 
