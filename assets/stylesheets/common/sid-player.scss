@@ -1,0 +1,232 @@
+// Discourse SID Player - Inline .sid file preview player
+// Retro C64-inspired aesthetic
+
+.sid-player-container {
+  margin: 0.75em 0;
+}
+
+.sid-player {
+  background: #3b3251;
+  border: 2px solid #7b68ae;
+  border-radius: 6px;
+  padding: 10px 14px;
+  max-width: 480px;
+  font-family: "Courier New", "Lucida Console", Monaco, monospace;
+  font-size: 0.85em;
+  color: #a8a0c0;
+  position: relative;
+  overflow: hidden;
+
+  // Subtle scan-line effect
+  &::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.04) 2px,
+      rgba(0, 0, 0, 0.04) 4px
+    );
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  * {
+    position: relative;
+    z-index: 2;
+  }
+}
+
+// Header row: icon + filename + download
+.sid-player__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(123, 104, 174, 0.4);
+}
+
+.sid-player__icon {
+  font-size: 1.4em;
+  color: #6be;
+  flex-shrink: 0;
+}
+
+.sid-player__filename {
+  flex: 1;
+  font-weight: bold;
+  color: #7bf;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sid-player__download {
+  color: #a8a0c0;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+
+  &:hover {
+    opacity: 1;
+    color: #7bf;
+  }
+}
+
+// Metadata
+.sid-player__meta {
+  margin-bottom: 8px;
+}
+
+.sid-player__meta-row {
+  display: flex;
+  gap: 6px;
+  line-height: 1.4;
+}
+
+.sid-player__label {
+  color: #8a80a8;
+  flex-shrink: 0;
+  min-width: 50px;
+}
+
+.sid-player__value {
+  color: #c8e0ff;
+}
+
+// Controls row
+.sid-player__controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sid-player__btn {
+  background: rgba(123, 104, 174, 0.3) !important;
+  border: 1px solid rgba(123, 104, 174, 0.6) !important;
+  color: #c8e0ff !important;
+  padding: 4px 10px;
+  font-size: 0.9em;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  min-width: 32px;
+
+  &:hover {
+    background: rgba(123, 104, 174, 0.5) !important;
+    border-color: #7bf !important;
+  }
+
+  .d-icon {
+    color: #7bf;
+  }
+}
+
+.sid-player__time {
+  color: #6be;
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+  margin-left: 4px;
+}
+
+.sid-player__loading {
+  color: #a8a0c0;
+  font-style: italic;
+
+  .d-icon {
+    animation: sid-spin 1s linear infinite;
+  }
+}
+
+.sid-player__error {
+  color: #f77;
+
+  .d-icon {
+    color: #f77;
+  }
+}
+
+.sid-player__ended {
+  color: #fd8;
+  font-size: 0.85em;
+  margin-left: 4px;
+}
+
+// Subtune selector
+.sid-player__subtune {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+}
+
+.sid-player__subtune-label {
+  color: #8a80a8;
+  font-size: 0.85em;
+}
+
+.sid-player__subtune-select {
+  background: rgba(123, 104, 174, 0.3);
+  border: 1px solid rgba(123, 104, 174, 0.6);
+  color: #c8e0ff;
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-family: inherit;
+  font-size: 0.9em;
+
+  option {
+    background: #3b3251;
+    color: #c8e0ff;
+  }
+}
+
+// Progress bar
+.sid-player__progress {
+  margin-top: 8px;
+  height: 3px;
+  background: rgba(123, 104, 174, 0.2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.sid-player__progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #6be, #7bf);
+  border-radius: 2px;
+  transition: width 0.25s linear;
+}
+
+// Spinner animation
+@keyframes sid-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// Dark theme adjustments (Discourse dark themes)
+.theme-dark .sid-player {
+  background: #2a2040;
+  border-color: #5a4888;
+}
+
+// Mobile adjustments
+@media (max-width: 600px) {
+  .sid-player {
+    max-width: 100%;
+    font-size: 0.8em;
+    padding: 8px 10px;
+  }
+
+  .sid-player__controls {
+    gap: 4px;
+  }
+}

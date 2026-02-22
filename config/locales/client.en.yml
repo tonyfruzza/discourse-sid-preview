@@ -1,0 +1,14 @@
+en:
+  js:
+    sid_player:
+      play: "Play"
+      pause: "Pause"
+      stop: "Stop"
+      restart: "Restart"
+      loading: "Loading SID..."
+      error: "Failed to load SID file"
+      title_label: "Title"
+      author_label: "Author"
+      subtune_label: "Subtune"
+      model_label: "SID Model"
+      time_limit_reached: "Playback limit reached"

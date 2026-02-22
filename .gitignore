@@ -1,0 +1,9 @@
+# Research repos - not part of the plugin distribution
+research/
+
+# Node modules (if any local tooling is added)
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db

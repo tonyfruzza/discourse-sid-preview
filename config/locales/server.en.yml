@@ -1,0 +1,5 @@
+en:
+  site_settings:
+    sid_preview_enabled: "Enable inline SID file preview player on posts"
+    sid_preview_max_seconds: "Maximum playback duration in seconds before auto-stop"
+    sid_preview_default_model: "Default SID chip model for playback (6581 or 8580)"
